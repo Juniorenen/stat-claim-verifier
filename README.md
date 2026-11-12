@@ -13,12 +13,12 @@ exact integer arithmetic, and issues a **graded verdict**, not a boolean.
 
 ---
 
-## Why this is a primitive and not a one-off demo
+## Why this is a primitive
 
 Every escrow, bounty, grant and insurance contract on GenLayer eventually needs
 the answer to "is this number real?". Today each of them either trusts a
 report's prose or bolts on a bespoke "ask an LLM if this looks right" check,
-which is exactly the thin wrapper the review guidelines exclude.
+which is a wrapper around a model call with no reproducible core.
 
 This contract answers a narrower and harder question than "is this true?":
 
@@ -43,10 +43,9 @@ The output is one of six states. The distinctions are the point:
 | `UNDERPOWERED` | Not significant, but the interval is too wide to conclude anything — the study could not have seen the effect |
 | `INSUFFICIENT` | The dataset does not measure what the claim asserts (judged, not assumed) |
 
-The `REFUTED` / `UNDERPOWERED` split is the one most human reviews get wrong:
-absence of significance is not evidence of absence, and only the confidence
-interval can tell you which one you are looking at. Both are computed, not
-guessed.
+The `REFUTED` / `UNDERPOWERED` split matters because absence of significance
+is not evidence of absence. Only the confidence interval separates the two, and
+both are computed rather than judged.
 
 ---
 
@@ -174,13 +173,13 @@ contract.finalize(cid)  # "SUPPORTED"
 ```
 
 150/1000 vs 100/1000 → +500 bp, z² = 11.43 against a 3.84 threshold, interval
-[211, 789] bp. Hand-checked in the test suite.
+[211, 789] bp. All three values are asserted in the test suite.
 
 ---
 
 ## Tests
 
-`16 passing`, Direct Mode (in-process, no Docker):
+16 tests, Direct Mode (in-process, no Docker):
 
 ```
 tests/test_stat_claim_verifier.py   13 tests
@@ -203,8 +202,8 @@ Run:
 
 ```bash
 python -m venv .venv
-.venv/Scripts/pip install genlayer-test    # or .venv/bin/pip on POSIX
-.venv/Scripts/python -m pytest tests/ -q
+.venv/bin/pip install genlayer-test        # Windows: .venv\Scripts\pip
+.venv/bin/python -m pytest tests/ -q
 ```
 
 `genvm-lint check contracts/stat_claim_verifier.py` → lint passed, validation
@@ -217,36 +216,29 @@ fd 0 at. POSIX allows that; Windows raises `WinError 32`. `tests/conftest.py`
 replaces that injector with an equivalent that defers deletion to interpreter
 exit. It is test-harness only and does not touch the contract.
 
-### Note on the runner pin
+---
 
-The header pins `py-genlayer:1jb45aa8…`, the hash used by the official
-Prediction Market example. `genvm-lint` reports a newer runner available
-(`1zr6nqk5…`); the pin was left alone so behaviour matches the documented
-example. Bumping it is a one-line change if the submission pipeline prefers
-latest.
+## Deployment
+
+The reference instance on Studionet:
+
+- contract `0xFA70F90e35Ad790f88f8c331fd8d6A45A922f449`
+- dataset `datasets/example_ab.csv` — 200 vs 200 rows, 30% vs 15%, `alpha_bp=500`
+- result: `diff_bp=1500`, `z²·1000=12903` against a 3841 threshold, interval `[682, 2318]`, verdict `SUPPORTED`
+
+Two constraints apply when redeploying:
+
+- **The version comment must be the only line in the file header.** GenVM
+  concatenates every leading `#` line into the runner descriptor and passes it
+  to a JSON parser, so a multi-line header yields `invalid_contract` at
+  deployment. Note that `genvm-lint` and Direct Mode tests do not catch this.
+- **The runner hash is pinned** to `py-genlayer:1jb45aa8…`, the version used by
+  the official Prediction Market example. `genvm-lint` notes a newer runner
+  available; the pin is deliberate, and moving it is a one-line change.
 
 ---
 
-## Deploying: the one trap that cost the most time
-
-GenVM parses the contract file's **leading comment block** as the runner
-descriptor (`executor/src/runners/parse.rs`). Every `#` line at the top of the
-file is concatenated and handed to a JSON parser. A version line plus a
-readable header comment therefore produces invalid JSON, and the deployment
-fails with a bare `invalid_contract` — no line number, no message, and nothing
-useful in the transaction receipt.
-
-Keep the header to exactly one line:
-
-```python
-# { "Depends": "py-genlayer:1jb45aa8..." }
-```
-
-Move any other explanation below the imports or into this README. A multi-line
-header still passes `genvm-lint` and still passes local Direct Mode tests; only
-the real chain rejects it.
-
-## Limits, stated plainly
+## Limits
 
 - **CSV/TSV only.** The contract refuses HTML and PDF rather than guessing at
   tables. A PDF path would need layout-aware extraction, and pretending a CSV
