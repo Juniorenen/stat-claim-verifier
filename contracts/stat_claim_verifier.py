@@ -1,19 +1,5 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
-# StatClaimVerifier — an Intelligent Contract that adjudicates statistical claims.
-#
-# A claimant points at a public dataset and at a claim made about it
-# ("treatment converts 12% better than control, significant at alpha=0.05").
-# The contract extracts the counts, runs the two-proportion test itself in
-# exact integer arithmetic, and issues a graded verdict instead of a boolean.
-#
-# Design split that matters for consensus:
-#   - Everything that CAN be deterministic IS deterministic: CSV parsing,
-#     column resolution when headers are well-formed, the hypothesis test,
-#     the confidence interval, the power floor, the decision tree.
-#   - Non-determinism is confined to two places where language is genuinely
-#     involved: resolving non-standard headers, and judging whether the
-#     dataset is applicable to the claim at all. Both are re-derived
-#     independently by validators and compared field by field.
+
 
 from genlayer import *
 
@@ -25,18 +11,16 @@ from dataclasses import dataclass
 # ---------------------------------------------------------------- constants
 
 # Two-sided critical values of the standard normal, squared, x1000.
-# (alpha in basis points -> z^2 * 1000)
+# (alpha in basis points -> z^2 * 1000), ordered by increasing alpha.
 _Z_CRIT_TABLE_SQ_MILLI = [
     (10, 10827),    # 0.001 -> 3.290527^2
-    (20, 7618),     # 0.002
+    (20, 9549),     # 0.002 -> 3.090232^2
     (50, 7879),     # 0.005 -> 2.807034^2
     (100, 6634),    # 0.01  -> 2.575829^2
     (200, 5411),    # 0.02  -> 2.326348^2
     (500, 3841),    # 0.05  -> 1.959964^2
     (1000, 2705),   # 0.10  -> 1.644854^2
 ]
-# Correct the 0.002 row (z = 3.090232 -> 9.549564) -- kept explicit, not interpolated.
-_Z_CRIT_TABLE_SQ_MILLI[1] = (20, 9549)
 
 _Z_ALPHA_MICRO = 1959964      # 1.959964 * 1e6, used for the 95% interval
 _Z_ALPHA_BETA_MICRO = 841621  # 0.841621 * 1e6, 80% power
@@ -78,7 +62,7 @@ def _z_crit_sq_milli(alpha_bp: int, subgroups: int) -> int:
     return chosen
 
 
-def _split_csv_line(line: str) -> typing.Any:
+def _split_csv_line(line: str):
     """Minimal RFC4180-ish splitter: honours double quotes and "" escapes."""
     out = []
     cur = []
@@ -111,14 +95,17 @@ def _split_csv_line(line: str) -> typing.Any:
         cur.append(ch)
         i += 1
     out.append("".join(cur))
-    return [c.strip() for c in out]
+    cells = []
+    for cell in out:
+        cells.append(cell.strip())
+    return cells
 
 
 def _norm(value: str) -> str:
     return value.strip().strip('"').strip("'").lower()
 
 
-def _resolve_column(header: typing.Any, wanted: str) -> int:
+def _resolve_column(header, wanted: str) -> int:
     """Exact match, then containment, then case-insensitive. -1 when absent."""
     target = _norm(wanted)
     if target == "":
@@ -132,7 +119,7 @@ def _resolve_column(header: typing.Any, wanted: str) -> int:
     return -1
 
 
-def _has_usable_header(row: typing.Any) -> bool:
+def _has_usable_header(row) -> bool:
     if len(row) < 2:
         return False
     for cell in row:
@@ -142,13 +129,13 @@ def _has_usable_header(row: typing.Any) -> bool:
 
 
 def _count_groups(
-    rows: typing.Any,
+    rows,
     group_idx: int,
     outcome_idx: int,
     group_a: str,
     group_b: str,
     success_value: str,
-) -> typing.Any:
+):
     """Deterministic tally over parsed rows -> (n_a, x_a, n_b, x_b, skipped)."""
     ga = _norm(group_a)
     gb = _norm(group_b)
@@ -329,7 +316,7 @@ class StatClaimVerifier(gl.Contract):
         success_value = claim.success_value
         claim_text = claim.claim_text
 
-        def leader_fn() -> typing.Any:
+        def leader_fn():
             response = gl.nondet.web.get(dataset_url)
             status = getattr(response, "status_code", 200)
             if status is not None and int(status) >= 400:
@@ -658,3 +645,23 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
         if claim is None:
             return False
         return claim.verdict == "SUPPORTED"
+
+
+# Notes (kept out of the runner header on purpose:
+# GenVM concatenates every leading comment line into the runner
+# descriptor, so a multi-line header is not valid JSON).
+# StatClaimVerifier — an Intelligent Contract that adjudicates statistical claims.
+#
+# A claimant points at a public dataset and at a claim made about it
+# ("treatment converts 12% better than control, significant at alpha=0.05").
+# The contract extracts the counts, runs the two-proportion test itself in
+# exact integer arithmetic, and issues a graded verdict instead of a boolean.
+#
+# Design split that matters for consensus:
+#   - Everything that CAN be deterministic IS deterministic: CSV parsing,
+#     column resolution when headers are well-formed, the hypothesis test,
+#     the confidence interval, the power floor, the decision tree.
+#   - Non-determinism is confined to two places where language is genuinely
+#     involved: resolving non-standard headers, and judging whether the
+#     dataset is applicable to the claim at all. Both are re-derived
+#     independently by validators and compared field by field.

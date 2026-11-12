@@ -227,6 +227,25 @@ latest.
 
 ---
 
+## Deploying: the one trap that cost the most time
+
+GenVM parses the contract file's **leading comment block** as the runner
+descriptor (`executor/src/runners/parse.rs`). Every `#` line at the top of the
+file is concatenated and handed to a JSON parser. A version line plus a
+readable header comment therefore produces invalid JSON, and the deployment
+fails with a bare `invalid_contract` — no line number, no message, and nothing
+useful in the transaction receipt.
+
+Keep the header to exactly one line:
+
+```python
+# { "Depends": "py-genlayer:1jb45aa8..." }
+```
+
+Move any other explanation below the imports or into this README. A multi-line
+header still passes `genvm-lint` and still passes local Direct Mode tests; only
+the real chain rejects it.
+
 ## Limits, stated plainly
 
 - **CSV/TSV only.** The contract refuses HTML and PDF rather than guessing at
