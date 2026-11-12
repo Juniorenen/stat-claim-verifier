@@ -258,7 +258,8 @@ class StatClaimVerifier(gl.Contract):
         if sg < 1 or sg > _MAX_SUBGROUPS:
             raise gl.vm.UserError("subgroups must be within [1, 50]")
 
-        cid = str(int(self.next_id) + 1)
+        new_id = int(self.next_id) + 1
+        cid = str(new_id)
         self.claims[cid] = Claim(
             claim_id=cid,
             submitter=gl.message.sender_address,
@@ -295,14 +296,14 @@ class StatClaimVerifier(gl.Contract):
             attested_at="",
             evaluated_at="",
         )
-        self.next_id = u32(int(self.next_id) + 1)
-        return cid
+        self.next_id = u32(new_id)
+        return u32(new_id)
 
     # -------------------------------------------------------------- extraction
 
     @gl.public.write
-    def attest(self, claim_id: str) -> str:
-        claim = self.claims.get(claim_id)
+    def attest(self, claim_id: u32) -> str:
+        claim = self.claims.get(str(int(claim_id)))
         if claim is None:
             raise gl.vm.UserError("unknown claim")
         if claim.state not in (STATE_OPEN, STATE_ATTESTED):
@@ -442,7 +443,7 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
         claim.state = STATE_ATTESTED
         import datetime
         claim.attested_at = datetime.datetime.now().isoformat()
-        self.claims[claim_id] = claim
+        self.claims[str(int(claim_id))] = claim
         return json.dumps(
             {
                 "n_a": int(claim.n_a),
@@ -458,8 +459,8 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
     # ------------------------------------------------------------ statistics
 
     @gl.public.write
-    def evaluate(self, claim_id: str) -> str:
-        claim = self.claims.get(claim_id)
+    def evaluate(self, claim_id: u32) -> str:
+        claim = self.claims.get(str(int(claim_id)))
         if claim is None:
             raise gl.vm.UserError("unknown claim")
         if claim.state != STATE_ATTESTED:
@@ -507,7 +508,7 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
         claim.state = STATE_EVALUATED
         import datetime
         claim.evaluated_at = datetime.datetime.now().isoformat()
-        self.claims[claim_id] = claim
+        self.claims[str(int(claim_id))] = claim
 
         return json.dumps(
             {
@@ -522,8 +523,8 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
         )
 
     @gl.public.write
-    def finalize(self, claim_id: str) -> str:
-        claim = self.claims.get(claim_id)
+    def finalize(self, claim_id: u32) -> str:
+        claim = self.claims.get(str(int(claim_id)))
         if claim is None:
             raise gl.vm.UserError("unknown claim")
         if claim.state != STATE_EVALUATED:
@@ -570,14 +571,14 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
 
         claim.verdict = verdict
         claim.state = STATE_FINAL
-        self.claims[claim_id] = claim
+        self.claims[str(int(claim_id))] = claim
         return verdict
 
     # --------------------------------------------------------------- appeals
 
     @gl.public.write
-    def appeal(self, claim_id: str, note: str) -> str:
-        claim = self.claims.get(claim_id)
+    def appeal(self, claim_id: u32, note: str) -> str:
+        claim = self.claims.get(str(int(claim_id)))
         if claim is None:
             raise gl.vm.UserError("unknown claim")
         if int(claim.appeals) >= 2:
@@ -593,14 +594,14 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
         claim.z_sq_milli = bigint(0)
         claim.z_crit_sq_milli = bigint(0)
         claim.evaluated_at = ""
-        self.claims[claim_id] = claim
+        self.claims[str(int(claim_id))] = claim
         return f"appeal {int(claim.appeals)}/2 accepted; re-attest and re-evaluate"
 
     # ------------------------------------------------------------------ views
 
     @gl.public.view
-    def get_claim(self, claim_id: str) -> str:
-        claim = self.claims.get(claim_id)
+    def get_claim(self, claim_id: u32) -> str:
+        claim = self.claims.get(str(int(claim_id)))
         if claim is None:
             return "{}"
         return json.dumps(
@@ -639,9 +640,9 @@ Return JSON only: {{"applicable": "yes"|"partial"|"no", "reason": "<one sentence
         return self.next_id
 
     @gl.public.view
-    def is_supported(self, claim_id: str) -> bool:
+    def is_supported(self, claim_id: u32) -> bool:
         """Convenience for other contracts composing on this one."""
-        claim = self.claims.get(claim_id)
+        claim = self.claims.get(str(int(claim_id)))
         if claim is None:
             return False
         return claim.verdict == "SUPPORTED"

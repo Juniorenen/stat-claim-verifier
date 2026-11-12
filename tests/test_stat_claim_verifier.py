@@ -44,7 +44,7 @@ def register(contract, **over):
 
 def test_register_validates_inputs(direct_deploy, direct_vm):
     c = direct_deploy("contracts/stat_claim_verifier.py")
-    assert register(c) == "1"
+    assert int(register(c)) == 1
 
     import pytest
     with direct_vm.expect_revert("group_a and group_b must differ"):
