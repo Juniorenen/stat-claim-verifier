@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+artifacts/
+.env
+dpst_backup.txt
